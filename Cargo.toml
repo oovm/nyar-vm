@@ -1,12 +1,17 @@
-[package]
-name = "Algebra"
-version = "0.0.5"
-authors = ["aster <aster@mugen.vip>"]
+[workspace]
+resolver = "2"
+members = ["projects/*"]
+default-members = [
+    #    "projects/nyar-hir",
+    #    "projects/nyar-mir",
+    "projects/nyar-error",
+    #    "projects/valkyrie-parser",
+    "projects/nyar-lir",
+]
+exclude = [
 
-[lib]
-name = "nyar_lib"
-path = "src/mod.rs"
+]
 
-
-[dependencies]
-num = "0.2"
+[profile.release]
+lto = true
+opt-level = "s"
