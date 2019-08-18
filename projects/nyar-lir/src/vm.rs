@@ -2,7 +2,7 @@
 //!
 //! 实现了基于栈机模型的虚拟机核心，包括执行上下文和指令执行逻辑。
 
-use crate::
+use crate::{
     instruction::{Instruction, OpCode},
     value::{Function, Value},
     Result,

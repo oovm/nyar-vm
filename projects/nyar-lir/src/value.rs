@@ -3,7 +3,7 @@
 //! 实现了Nyar语言的基本值类型，包括null、bool、bigint和string，
 //! 以及使用gc-arena进行内存管理的对象引用。
 
-use gc_arena::{Arena, Collect, Gc, GcCell, MutationContext};
+use gc_arena::{Arena, Collect, Gc, GcCell, Mutation, MutationContext};
 use num::BigInt;
 use std::fmt;
 
@@ -61,7 +61,7 @@ pub enum ValueType {
     Function,
 }
 
-impl<'gc> Value<'gc> {
+impl<'vm> Value<'vm> {
     /// 获取值的类型
     pub fn get_type(&self) -> ValueType {
         match self {
@@ -76,17 +76,14 @@ impl<'gc> Value<'gc> {
     }
 
     /// 创建一个新的对象
-    pub fn new_object(mc: MutationContext<'gc, '_>, class_name: &str) -> Self {
-        let obj = Object {
-            class_name: Gc::allocate(mc, class_name.to_string()),
-            properties: std::collections::HashMap::new(),
-        };
-        Value::Object(Gc::allocate(mc, GcCell::allocate(mc, obj)))
+    pub fn new_object(mc: Mutation<'vm>, class_name: &str) -> Self {
+        let obj = Object { class_name: Gc::new(&mc, class_name.to_string()), properties: std::collections::HashMap::new() };
+        Value::Object(Gc::new(&mc, GcCell::allocate(mc, obj)))
     }
 
     /// 创建一个新的数组
-    pub fn new_array(mc: MutationContext<'gc, '_>) -> Self {
-        Value::Array(Gc::allocate(mc, GcCell::allocate(mc, Vec::new())))
+    pub fn new_array(mc: Mutation<'vm>) -> Self {
+        Value::Array(Gc::new(&mc, GcCell::allocate(mc, Vec::new())))
     }
 }
 
@@ -96,11 +93,10 @@ impl<'gc> fmt::Debug for Value<'gc> {
             Value::Null => write!(f, "null"),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Integer(i) => write!(f, "{}", i),
-            Value::String(s) => write!(f, "\"{}\""", s),
+            Value::String(s) => write!(f, "\"{}\"", s),
             Value::Object(_) => write!(f, "<object>"),
             Value::Array(_) => write!(f, "<array>"),
             Value::Function(func) => write!(f, "<function: {}>", func.name),
         }
     }
 }
-"}}}
