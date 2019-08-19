@@ -2,13 +2,8 @@
 //!
 //! 实现了Nyar语言的复杂控制流，包括循环、生成器、异步和效果处理系统。
 
-use crate::
-    instruction::Instruction,
-    value::Value,
-    vm::ExecutionContext,
-    Result,
-};
-use gc_arena::{Arena, Collect, Gc, GcCell, MutationContext};
+use crate::{Result, instruction::NyarInstruction, value::NyarValue, vm::ExecutionContext};
+use gc_arena::{Arena, Collect, Gc, Mutation};
 use std::collections::HashMap;
 
 /// 控制流状态
@@ -23,9 +18,9 @@ pub enum ControlFlow {
     /// 返回值
     Return(usize), // 返回值在栈上的索引
     /// 生成器产出值
-    Yield(usize),  // 产出值在栈上的索引
+    Yield(usize), // 产出值在栈上的索引
     /// 等待异步操作
-    Await(usize),  // 异步操作在栈上的索引
+    Await(usize), // 异步操作在栈上的索引
     /// 抛出效果
     Raise(String, usize), // 效果名称和参数在栈上的索引
 }
@@ -33,36 +28,30 @@ pub enum ControlFlow {
 /// 生成器状态
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct Generator<'gc> {
+pub struct NyarGenerator<'vm> {
     /// 生成器名称
     pub name: String,
     /// 生成器指令
-    pub instructions: Vec<Instruction>,
+    pub instructions: Vec<NyarInstruction>,
     /// 当前指令指针
     pub ip: usize,
     /// 局部变量
-    pub locals: Vec<Value<'gc>>,
+    pub locals: Vec<NyarValue<'vm>>,
     /// 是否已完成
     pub is_done: bool,
 }
 
-impl<'gc> Generator<'gc> {
+impl<'gc> NyarGenerator<'gc> {
     /// 创建一个新的生成器
-    pub fn new(name: &str, instructions: Vec<Instruction>) -> Self {
-        Self {
-            name: name.to_string(),
-            instructions,
-            ip: 0,
-            locals: Vec::new(),
-            is_done: false,
-        }
+    pub fn new(name: &str, instructions: Vec<NyarInstruction>) -> Self {
+        Self { name: name.to_string(), instructions, ip: 0, locals: Vec::new(), is_done: false }
     }
 
     /// 恢复生成器执行
-    pub fn resume(&mut self, context: &mut ExecutionContext<'gc>, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>> {
+    pub fn resume(&mut self, context: &mut ExecutionContext<'gc>, mc: Mutation<'gc>) -> Result<NyarValue<'gc>> {
         // 实际实现中，这里需要保存和恢复执行上下文
         // 这里只是一个简化的示例
-        Ok(Value::Null)
+        Ok(NyarValue::Null)
     }
 }
 
@@ -73,42 +62,35 @@ pub struct AsyncTask<'gc> {
     /// 任务名称
     pub name: String,
     /// 任务指令
-    pub instructions: Vec<Instruction>,
+    pub instructions: Vec<NyarInstruction>,
     /// 当前指令指针
     pub ip: usize,
     /// 局部变量
-    pub locals: Vec<Value<'gc>>,
+    pub locals: Vec<NyarValue<'gc>>,
     /// 是否已完成
     pub is_done: bool,
     /// 结果值
-    pub result: Option<Value<'gc>>,
+    pub result: Option<NyarValue<'gc>>,
 }
 
 impl<'gc> AsyncTask<'gc> {
     /// 创建一个新的异步任务
-    pub fn new(name: &str, instructions: Vec<Instruction>) -> Self {
-        Self {
-            name: name.to_string(),
-            instructions,
-            ip: 0,
-            locals: Vec::new(),
-            is_done: false,
-            result: None,
-        }
+    pub fn new(name: &str, instructions: Vec<NyarInstruction>) -> Self {
+        Self { name: name.to_string(), instructions, ip: 0, locals: Vec::new(), is_done: false, result: None }
     }
 
     /// 执行异步任务
-    pub fn execute(&mut self, context: &mut ExecutionContext<'gc>, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>> {
+    pub fn execute(&mut self, context: &mut ExecutionContext<'gc>, mc: Mutation<'gc>) -> Result<NyarValue<'gc>> {
         // 实际实现中，这里需要与tokio集成
         // 这里只是一个简化的示例
-        Ok(Value::Null)
+        Ok(NyarValue::Null)
     }
 }
 
 /// 效果处理器
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct EffectHandler<'gc> {
+pub struct NyarHandler<'gc> {
     /// 效果名称
     pub name: String,
     /// 处理函数
@@ -117,27 +99,23 @@ pub struct EffectHandler<'gc> {
     pub resume_points: HashMap<String, usize>,
 }
 
-impl<'gc> EffectHandler<'gc> {
+impl<'vm> NyarHandler<'vm> {
     /// 创建一个新的效果处理器
-    pub fn new(name: &str, handler: Gc<'gc, crate::value::Function<'gc>>) -> Self {
-        Self {
-            name: name.to_string(),
-            handler,
-            resume_points: HashMap::new(),
-        }
+    pub fn new(name: &str, handler: Gc<'vm, crate::value::Function<'vm>>) -> Self {
+        Self { name: name.to_string(), handler, resume_points: HashMap::new() }
     }
 
     /// 处理效果
     pub fn handle(
         &self,
         effect_name: &str,
-        args: Vec<Value<'gc>>,
-        context: &mut ExecutionContext<'gc>,
-        mc: MutationContext<'gc, '_>,
-    ) -> Result<Value<'gc>> {
+        args: Vec<NyarValue<'vm>>,
+        context: &mut ExecutionContext<'vm>,
+        mc: Mutation<'vm>,
+    ) -> Result<NyarValue<'vm>> {
         // 实际实现中，这里需要调用处理函数并管理恢复点
         // 这里只是一个简化的示例
-        Ok(Value::Null)
+        Ok(NyarValue::Null)
     }
 
     /// 添加恢复点
@@ -149,20 +127,18 @@ impl<'gc> EffectHandler<'gc> {
     pub fn resume(
         &self,
         label: &str,
-        value: Value<'gc>,
-        context: &mut ExecutionContext<'gc>,
-        mc: MutationContext<'gc, '_>,
-    ) -> Result<Value<'gc>> {
+        value: NyarValue<'vm>,
+        context: &mut ExecutionContext<'vm>,
+        ctx: Mutation<'vm>,
+    ) -> Result<NyarValue<'vm>> {
         if let Some(ip) = self.resume_points.get(label) {
             // 设置恢复点并将值压入栈
             context.ip = *ip;
             context.push(value);
-            Ok(Value::Null)
-        } else {
-            Err(nyar_error::NyarError::custom(format!(
-                "No resume point labeled '{}' in effect handler '{}'",
-                label, self.name
-            )))
+            Ok(NyarValue::Null)
+        }
+        else {
+            Err(nyar_error::NyarError::custom(format!("No resume point labeled '{}' in effect handler '{}'", label, self.name)))
         }
     }
 }
@@ -170,7 +146,7 @@ impl<'gc> EffectHandler<'gc> {
 /// 循环控制器
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct Loop<'gc> {
+pub struct NyarLoop<'gc> {
     /// 循环名称（可选）
     pub label: Option<String>,
     /// 循环体起始指令位置
@@ -178,27 +154,22 @@ pub struct Loop<'gc> {
     /// 循环体结束指令位置
     pub end_ip: usize,
     /// 循环变量
-    pub variables: HashMap<String, Value<'gc>>,
+    pub variables: HashMap<String, NyarValue<'gc>>,
 }
 
-impl<'gc> Loop<'gc> {
+impl<'gc> NyarLoop<'gc> {
     /// 创建一个新的循环
     pub fn new(start_ip: usize, end_ip: usize, label: Option<String>) -> Self {
-        Self {
-            label,
-            start_ip,
-            end_ip,
-            variables: HashMap::new(),
-        }
+        Self { label, start_ip, end_ip, variables: HashMap::new() }
     }
 
     /// 设置循环变量
-    pub fn set_variable(&mut self, name: &str, value: Value<'gc>) {
+    pub fn set_variable(&mut self, name: &str, value: NyarValue<'gc>) {
         self.variables.insert(name.to_string(), value);
     }
 
     /// 获取循环变量
-    pub fn get_variable(&self, name: &str) -> Option<Value<'gc>> {
+    pub fn get_variable(&self, name: &str) -> Option<NyarValue<'gc>> {
         self.variables.get(name).cloned()
     }
 }
@@ -208,7 +179,7 @@ impl<'gc> Loop<'gc> {
 #[collect(no_drop)]
 pub struct MatchStatement<'gc> {
     /// 匹配值
-    pub value: Value<'gc>,
+    pub value: NyarValue<'gc>,
     /// 分支表
     pub branches: Vec<MatchBranch>,
     /// 是否允许穿透（fall-through）
@@ -216,7 +187,8 @@ pub struct MatchStatement<'gc> {
 }
 
 /// 匹配分支
-#[derive(Clone)]
+#[derive(Clone, Collect)]
+#[collect(no_drop)]
 pub struct MatchBranch {
     /// 分支条件指令
     pub condition_ip: usize,
@@ -228,12 +200,8 @@ pub struct MatchBranch {
 
 impl<'gc> MatchStatement<'gc> {
     /// 创建一个新的匹配语句
-    pub fn new(value: Value<'gc>, allow_fall_through: bool) -> Self {
-        Self {
-            value,
-            branches: Vec::new(),
-            allow_fall_through,
-        }
+    pub fn new(value: NyarValue<'gc>, allow_fall_through: bool) -> Self {
+        Self { value, branches: Vec::new(), allow_fall_through }
     }
 
     /// 添加分支
@@ -242,11 +210,7 @@ impl<'gc> MatchStatement<'gc> {
     }
 
     /// 执行匹配
-    pub fn execute(
-        &self,
-        context: &mut ExecutionContext<'gc>,
-        mc: MutationContext<'gc, '_>,
-    ) -> Result<ControlFlow> {
+    pub fn execute(&self, context: &mut ExecutionContext<'gc>, mc: Mutation<'gc>) -> Result<ControlFlow> {
         // 实际实现中，这里需要执行条件判断并跳转到相应分支
         // 这里只是一个简化的示例
         Ok(ControlFlow::Normal)

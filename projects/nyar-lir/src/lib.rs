@@ -9,11 +9,11 @@ mod object;
 mod control_flow;
 
 pub use crate::{
-    value::{Value, ValueType},
-    instruction::{Instruction, OpCode},
-    vm::{VirtualMachine, ExecutionContext},
-    object::{Class, Trait, Enum, Object},
-    control_flow::{ControlFlow, EffectHandler},
+    value::{NyarValue, ValueType},
+    instruction::{NyarInstruction, OpCode},
+    vm::{NyarVM, ExecutionContext},
+    object::{Class, Trait, Enum, NyarObject},
+    control_flow::{ControlFlow, NyarHandler},
 };
 
 /// Nyar-LIR 的结果类型

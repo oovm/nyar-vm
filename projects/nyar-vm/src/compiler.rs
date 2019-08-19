@@ -3,7 +3,7 @@
 //! 负责将Nyar语言的高级中间表示(HIR)编译为低级中间表示(LIR)指令。
 
 use nyar_error::NyarError;
-use nyar_lir::{Instruction, OpCode, Value};
+use nyar_lir::{NyarInstruction, OpCode, Value};
 use std::collections::HashMap;
 
 /// 编译器结构
@@ -13,7 +13,7 @@ pub struct Compiler {
     /// 局部变量表
     locals: HashMap<String, usize>,
     /// 当前指令列表
-    instructions: Vec<Instruction>,
+    instructions: Vec<NyarInstruction>,
     /// 跳转表（用于解析标签）
     jumps: HashMap<String, usize>,
 }
@@ -113,7 +113,7 @@ impl Compiler {
     }
 
     /// 编译HIR为LIR指令
-    pub fn compile(&mut self, hir: &Hir) -> crate::Result<Vec<Instruction>> {
+    pub fn compile(&mut self, hir: &Hir) -> crate::Result<Vec<NyarInstruction>> {
         // 清空之前的状态
         self.constants.clear();
         self.locals.clear();
@@ -163,7 +163,7 @@ impl Compiler {
 
         // 添加到常量池并生成Push指令
         let const_idx = self.add_constant(value);
-        self.emit(Instruction::new(OpCode::Push, vec![const_idx]));
+        self.emit(NyarInstruction::new(OpCode::Push, vec![const_idx]));
 
         Ok(())
     }
@@ -178,7 +178,7 @@ impl Compiler {
         self.locals.insert(name.to_string(), local_idx);
 
         // 生成存储指令
-        self.emit(Instruction::new(OpCode::StoreLocal, vec![local_idx]));
+        self.emit(NyarInstruction::new(OpCode::StoreLocal, vec![local_idx]));
 
         Ok(())
     }
@@ -187,11 +187,11 @@ impl Compiler {
     fn compile_var_reference(&mut self, name: &str) -> crate::Result<()> {
         if let Some(local_idx) = self.locals.get(name) {
             // 局部变量
-            self.emit(Instruction::new(OpCode::LoadLocal, vec![*local_idx]));
+            self.emit(NyarInstruction::new(OpCode::LoadLocal, vec![*local_idx]));
         } else {
             // 全局变量
             let name_idx = self.add_constant(Value::Null); // 实际应该是字符串常量
-            self.emit(Instruction::new(OpCode::LoadGlobal, vec![name_idx]));
+            self.emit(NyarInstruction::new(OpCode::LoadGlobal, vec![name_idx]));
         }
 
         Ok(())
@@ -220,7 +220,7 @@ impl Compiler {
             BinaryOperator::Or => OpCode::Or,
         };
 
-        self.emit(Instruction::simple(opcode));
+        self.emit(NyarInstruction::simple(opcode));
 
         Ok(())
     }
@@ -244,8 +244,8 @@ impl Compiler {
 
         // 确保函数有返回值
         if !body.iter().any(|node| matches!(node, HirNode::ReturnStatement { .. })) {
-            self.emit(Instruction::simple(OpCode::Push)); // 推入null
-            self.emit(Instruction::simple(OpCode::Return));
+            self.emit(NyarInstruction::simple(OpCode::Push)); // 推入null
+            self.emit(NyarInstruction::simple(OpCode::Return));
         }
 
         // 创建函数对象（实际实现中需要使用gc-arena）
@@ -258,8 +258,8 @@ impl Compiler {
         let func_idx = self.add_constant(Value::Null); // 实际应该是函数对象
         let name_idx = self.add_constant(Value::Null); // 实际应该是字符串常量
 
-        self.emit(Instruction::new(OpCode::Push, vec![func_idx]));
-        self.emit(Instruction::new(OpCode::StoreGlobal, vec![name_idx]));
+        self.emit(NyarInstruction::new(OpCode::Push, vec![func_idx]));
+        self.emit(NyarInstruction::new(OpCode::StoreGlobal, vec![name_idx]));
 
         Ok(())
     }
@@ -275,7 +275,7 @@ impl Compiler {
         self.compile_node(callee)?;
 
         // 生成调用指令
-        self.emit(Instruction::new(OpCode::Call, vec![args.len()]));
+        self.emit(NyarInstruction::new(OpCode::Call, vec![args.len()]));
 
         Ok(())
     }
@@ -292,7 +292,7 @@ impl Compiler {
 
         // 生成条件跳转指令（先用占位符）
         let jump_if_not_idx = self.instructions.len();
-        self.emit(Instruction::new(OpCode::JumpIfNot, vec![0])); // 占位符
+        self.emit(NyarInstruction::new(OpCode::JumpIfNot, vec![0])); // 占位符
 
         // 编译then分支
         for node in then_branch {
@@ -302,11 +302,11 @@ impl Compiler {
         if let Some(else_branch) = else_branch {
             // 生成跳过else分支的跳转指令（先用占位符）
             let jump_idx = self.instructions.len();
-            self.emit(Instruction::new(OpCode::Jump, vec![0])); // 占位符
+            self.emit(NyarInstruction::new(OpCode::Jump, vec![0])); // 占位符
 
             // 更新条件跳转指令的目标地址
             let else_start = self.instructions.len();
-            self.instructions[jump_if_not_idx] = Instruction::new(OpCode::JumpIfNot, vec![else_start]);
+            self.instructions[jump_if_not_idx] = NyarInstruction::new(OpCode::JumpIfNot, vec![else_start]);
 
             // 编译else分支
             for node in else_branch {
@@ -315,11 +315,11 @@ impl Compiler {
 
             // 更新跳过else分支的跳转指令的目标地址
             let after_else = self.instructions.len();
-            self.instructions[jump_idx] = Instruction::new(OpCode::Jump, vec![after_else]);
+            self.instructions[jump_idx] = NyarInstruction::new(OpCode::Jump, vec![after_else]);
         } else {
             // 没有else分支，直接更新条件跳转指令的目标地址
             let after_then = self.instructions.len();
-            self.instructions[jump_if_not_idx] = Instruction::new(OpCode::JumpIfNot, vec![after_then]);
+            self.instructions[jump_if_not_idx] = NyarInstruction::new(OpCode::JumpIfNot, vec![after_then]);
         }
 
         Ok(())
@@ -331,7 +331,7 @@ impl Compiler {
         let loop_start = self.instructions.len();
 
         // 生成循环开始指令
-        self.emit(Instruction::simple(OpCode::Loop));
+        self.emit(NyarInstruction::simple(OpCode::Loop));
 
         // 编译循环体
         for node in body {
@@ -339,7 +339,7 @@ impl Compiler {
         }
 
         // 生成跳回循环开始的指令
-        self.emit(Instruction::new(OpCode::Jump, vec![loop_start]));
+        self.emit(NyarInstruction::new(OpCode::Jump, vec![loop_start]));
 
         // 记录循环结束位置（用于break指令）
         let loop_end = self.instructions.len();
@@ -357,11 +357,11 @@ impl Compiler {
             self.compile_node(value)?;
         } else {
             // 没有返回值，默认返回null
-            self.emit(Instruction::new(OpCode::Push, vec![self.add_constant(Value::Null)]));
+            self.emit(NyarInstruction::new(OpCode::Push, vec![self.add_constant(Value::Null)]));
         }
 
         // 生成返回指令
-        self.emit(Instruction::simple(OpCode::Return));
+        self.emit(NyarInstruction::simple(OpCode::Return));
 
         Ok(())
     }
@@ -370,7 +370,7 @@ impl Compiler {
     fn compile_class_declaration(&mut self, name: &str, methods: &[HirNode]) -> crate::Result<()> {
         // 创建类对象
         let class_name_idx = self.add_constant(Value::Null); // 实际应该是字符串常量
-        self.emit(Instruction::new(OpCode::NewObject, vec![class_name_idx]));
+        self.emit(NyarInstruction::new(OpCode::NewObject, vec![class_name_idx]));
 
         // 编译方法
         for method in methods {
@@ -380,13 +380,13 @@ impl Compiler {
                 
                 // 获取方法并设置为类的属性
                 let method_name_idx = self.add_constant(Value::Null); // 实际应该是字符串常量
-                self.emit(Instruction::new(OpCode::SetProperty, vec![method_name_idx]));
+                self.emit(NyarInstruction::new(OpCode::SetProperty, vec![method_name_idx]));
             }
         }
 
         // 存储类为全局变量
         let name_idx = self.add_constant(Value::Null); // 实际应该是字符串常量
-        self.emit(Instruction::new(OpCode::StoreGlobal, vec![name_idx]));
+        self.emit(NyarInstruction::new(OpCode::StoreGlobal, vec![name_idx]));
 
         Ok(())
     }
@@ -412,7 +412,7 @@ impl Compiler {
     }
 
     /// 发出指令
-    fn emit(&mut self, instruction: Instruction) {
+    fn emit(&mut self, instruction: NyarInstruction) {
         self.instructions.push(instruction);
     }
 }

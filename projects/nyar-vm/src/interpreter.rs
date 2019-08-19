@@ -4,7 +4,7 @@
 
 use gc_arena::{Arena, Collect, Gc, GcCell, MutationContext};
 use nyar_error::NyarError;
-use nyar_lir::{Instruction, OpCode, Value, VirtualMachine, ExecutionContext};
+use nyar_lir::{NyarInstruction, OpCode, Value, VirtualMachine, ExecutionContext};
 use std::collections::HashMap;
 
 /// 解释器结构
@@ -37,7 +37,7 @@ impl Interpreter {
     }
 
     /// 执行指令序列
-    pub fn execute(&mut self, instructions: Vec<Instruction>) -> crate::Result<Value<'static>> {
+    pub fn execute(&mut self, instructions: Vec<NyarInstruction>) -> crate::Result<Value<'static>> {
         self.arena.mutate(|mc, roots| {
             // 设置虚拟机的代码段
             roots.vm.code = instructions;
@@ -76,7 +76,7 @@ impl Interpreter {
     /// 执行单个指令
     fn execute_instruction(
         &self,
-        instruction: &Instruction,
+        instruction: &NyarInstruction,
         context: &mut ExecutionContext<'_>,
         mc: MutationContext<'_, '_>,
     ) -> crate::Result<()> {

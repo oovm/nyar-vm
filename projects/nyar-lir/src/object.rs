@@ -2,8 +2,8 @@
 //!
 //! 实现了Nyar语言的对象系统，包括Class、Trait和Enum。
 
-use crate::value::{Value, Function};
-use gc_arena::{Arena, Collect, Gc, GcCell, MutationContext};
+use crate::value::{NyarValue, Function};
+use gc_arena::{Arena, Collect, Gc, Mutation};
 use std::collections::HashMap;
 
 /// 类定义
@@ -19,7 +19,7 @@ pub struct Class<'gc> {
     /// 方法表
     pub methods: HashMap<String, Gc<'gc, Function<'gc>>>,
     /// 静态属性
-    pub static_properties: HashMap<String, Value<'gc>>,
+    pub static_properties: HashMap<String, NyarValue<'gc>>,
 }
 
 /// 特征（接口）定义
@@ -35,7 +35,8 @@ pub struct Trait<'gc> {
 }
 
 /// 方法签名
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Collect)]
+#[collect(no_drop)]
 pub struct MethodSignature {
     /// 方法名
     pub name: String,
@@ -72,7 +73,7 @@ pub struct EnumVariant<'gc> {
 /// 对象实例
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct Object<'gc> {
+pub struct NyarObject<'gc> {
     /// 类引用
     pub class: Option<Gc<'gc, Class<'gc>>>,
     /// 枚举引用（如果是枚举实例）
@@ -80,14 +81,14 @@ pub struct Object<'gc> {
     /// 当前变体（如果是枚举实例）
     pub variant: Option<String>,
     /// 属性表
-    pub properties: HashMap<String, Value<'gc>>,
+    pub properties: HashMap<String, NyarValue<'gc>>,
 }
 
 impl<'gc> Class<'gc> {
     /// 创建一个新的类
-    pub fn new(mc: MutationContext<'gc, '_>, name: &str) -> Gc<'gc, Self> {
-        Gc::allocate(mc, Self {
-            name: Gc::allocate(mc, name.to_string()),
+    pub fn new(mc: &Mutation<'gc>, name: &str) -> Gc<'gc, Self> {
+        Gc::new(mc, Self {
+            name: Gc::new(mc, name.to_string()),
             parent: None,
             traits: Vec::new(),
             methods: HashMap::new(),
@@ -115,23 +116,25 @@ impl<'gc> Class<'gc> {
     }
 
     /// 创建该类的实例
-    pub fn instantiate(&self, mc: MutationContext<'gc, '_>) -> Gc<'gc, GcCell<'gc, Object<'gc>>> {
-        let obj = Object {
-            class: Some(Gc::from_raw(self as *const _)),
+    pub fn instantiate(&self, mc: &Mutation<'gc>) -> Gc<'gc, NyarObject<'gc>> {
+        let obj = NyarObject {
+            class: Some(unsafe {
+                Gc::from_ptr(self as *const _)
+            }),
             enum_type: None,
             variant: None,
             properties: HashMap::new(),
         };
 
-        Gc::allocate(mc, GcCell::allocate(mc, obj))
+        Gc::new(mc, obj)
     }
 }
 
 impl<'gc> Trait<'gc> {
     /// 创建一个新的特征
-    pub fn new(mc: MutationContext<'gc, '_>, name: &str) -> Gc<'gc, Self> {
-        Gc::allocate(mc, Self {
-            name: Gc::allocate(mc, name.to_string()),
+    pub fn new(mc: &Mutation<'gc>, name: &str) -> Gc<'gc, Self> {
+        Gc::new(mc, Self {
+            name: Gc::new(mc, name.to_string()),
             parents: Vec::new(),
             method_signatures: HashMap::new(),
         })
@@ -169,9 +172,9 @@ impl<'gc> Trait<'gc> {
 
 impl<'gc> Enum<'gc> {
     /// 创建一个新的枚举
-    pub fn new(mc: MutationContext<'gc, '_>, name: &str) -> Gc<'gc, Self> {
-        Gc::allocate(mc, Self {
-            name: Gc::allocate(mc, name.to_string()),
+    pub fn new(mc: &Mutation<'gc>, name: &str) -> Gc<'gc, Self> {
+        Gc::new(mc, Self {
+            name: Gc::new(mc, name.to_string()),
             variants: HashMap::new(),
             methods: HashMap::new(),
         })
@@ -190,31 +193,33 @@ impl<'gc> Enum<'gc> {
     /// 创建变体实例
     pub fn instantiate_variant(
         &self,
-        mc: MutationContext<'gc, '_>,
+        mc: &Mutation<'gc>,
         variant_name: &str,
-        args: Vec<Value<'gc>>,
-    ) -> Result<Gc<'gc, GcCell<'gc, Object<'gc>>>, nyar_error::NyarError> {
+        args: Vec<NyarValue<'gc>>,
+    ) -> Result<Gc<'gc, NyarObject<'gc>>, nyar_error::NyarError> {
         if let Some(variant) = self.variants.get(variant_name) {
-            let obj = Object {
+            let obj = NyarObject {
                 class: None,
-                enum_type: Some(Gc::from_raw(self as *const _)),
+                enum_type: Some(unsafe {
+                    Gc::from_ptr(self as *const _)
+                }),
                 variant: Some(variant_name.to_string()),
                 properties: HashMap::new(),
             };
 
             // 设置字段值
-            let obj_gc = Gc::allocate(mc, GcCell::allocate(mc, obj));
-            let mut obj_ref = obj_gc.write(mc);
+            let obj_ref = Gc::new(mc, obj);
+            let mut obj_ref = obj_ref.write(mc);
 
             for (i, field_name) in variant.fields.iter().enumerate() {
                 if i < args.len() {
                     obj_ref.properties.insert(field_name.clone(), args[i].clone());
                 } else {
-                    obj_ref.properties.insert(field_name.clone(), Value::Null);
+                    obj_ref.properties.insert(field_name.clone(), NyarValue::Null);
                 }
             }
 
-            Ok(obj_gc)
+            Ok(obj_ref)
         } else {
             Err(nyar_error::NyarError::custom(format!(
                 "Enum {} does not have variant {}",
@@ -224,14 +229,14 @@ impl<'gc> Enum<'gc> {
     }
 }
 
-impl<'gc> Object<'gc> {
+impl<'gc> NyarObject<'gc> {
     /// 获取属性值
-    pub fn get_property(&self, name: &str) -> Option<Value<'gc>> {
+    pub fn get_property(&self, name: &str) -> Option<NyarValue<'gc>> {
         self.properties.get(name).cloned()
     }
 
     /// 设置属性值
-    pub fn set_property(&mut self, name: &str, value: Value<'gc>) {
+    pub fn set_property(&mut self, name: &str, value: NyarValue<'gc>) {
         self.properties.insert(name.to_string(), value);
     }
 
@@ -239,7 +244,7 @@ impl<'gc> Object<'gc> {
     pub fn call_method(
         &self,
         name: &str,
-        args: Vec<Value<'gc>>,
+        args: Vec<NyarValue<'gc>>,
     ) -> Option<Gc<'gc, Function<'gc>>> {
         if let Some(class) = &self.class {
             class.find_method(name)
