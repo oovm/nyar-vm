@@ -3,7 +3,7 @@
 //! 实现了Nyar语言的复杂控制流，包括循环、生成器、异步和效果处理系统。
 
 use crate::{Result, instruction::NyarInstruction, value::NyarValue, vm::ExecutionContext};
-use gc_arena::{Arena, Collect, Gc, Mutation};
+use gc_arena::{ Collect, Gc, Mutation};
 use std::collections::HashMap;
 
 /// 控制流状态
@@ -48,7 +48,7 @@ impl<'gc> NyarGenerator<'gc> {
     }
 
     /// 恢复生成器执行
-    pub fn resume(&mut self, context: &mut ExecutionContext<'gc>, mc: Mutation<'gc>) -> Result<NyarValue<'gc>> {
+    pub fn resume(&mut self, _context: &mut ExecutionContext<'gc>, _mc: Mutation<'gc>) -> Result<NyarValue<'gc>> {
         // 实际实现中，这里需要保存和恢复执行上下文
         // 这里只是一个简化的示例
         Ok(NyarValue::Null)
@@ -80,7 +80,7 @@ impl<'gc> AsyncTask<'gc> {
     }
 
     /// 执行异步任务
-    pub fn execute(&mut self, context: &mut ExecutionContext<'gc>, mc: Mutation<'gc>) -> Result<NyarValue<'gc>> {
+    pub fn execute(&mut self, _context: &mut ExecutionContext<'gc>, _mc: Mutation<'gc>) -> Result<NyarValue<'gc>> {
         // 实际实现中，这里需要与tokio集成
         // 这里只是一个简化的示例
         Ok(NyarValue::Null)
@@ -108,10 +108,10 @@ impl<'vm> NyarHandler<'vm> {
     /// 处理效果
     pub fn handle(
         &self,
-        effect_name: &str,
-        args: Vec<NyarValue<'vm>>,
-        context: &mut ExecutionContext<'vm>,
-        mc: Mutation<'vm>,
+        _effect_name: &str,
+        _args: Vec<NyarValue<'vm>>,
+        _context: &mut ExecutionContext<'vm>,
+        _mc: Mutation<'vm>,
     ) -> Result<NyarValue<'vm>> {
         // 实际实现中，这里需要调用处理函数并管理恢复点
         // 这里只是一个简化的示例
@@ -129,7 +129,7 @@ impl<'vm> NyarHandler<'vm> {
         label: &str,
         value: NyarValue<'vm>,
         context: &mut ExecutionContext<'vm>,
-        ctx: Mutation<'vm>,
+        _ctx: Mutation<'vm>,
     ) -> Result<NyarValue<'vm>> {
         if let Some(ip) = self.resume_points.get(label) {
             // 设置恢复点并将值压入栈
@@ -210,7 +210,7 @@ impl<'gc> MatchStatement<'gc> {
     }
 
     /// 执行匹配
-    pub fn execute(&self, context: &mut ExecutionContext<'gc>, mc: Mutation<'gc>) -> Result<ControlFlow> {
+    pub fn execute(&self, _context: &mut ExecutionContext<'gc>, _mc: Mutation<'gc>) -> Result<ControlFlow> {
         // 实际实现中，这里需要执行条件判断并跳转到相应分支
         // 这里只是一个简化的示例
         Ok(ControlFlow::Normal)

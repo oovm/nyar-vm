@@ -4,7 +4,7 @@
 //! 以及使用gc-arena进行内存管理的对象引用。
 
 use crate::instruction::NyarInstruction;
-use gc_arena::{Arena, Collect, Gc, Mutation};
+use gc_arena::{ Collect, Gc, Mutation};
 use num::BigInt;
 use std::{collections::HashMap, fmt};
 

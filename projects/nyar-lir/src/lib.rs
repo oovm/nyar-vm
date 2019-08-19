@@ -10,8 +10,8 @@ mod control_flow;
 
 pub use crate::{
     value::{NyarValue, ValueType},
-    instruction::{NyarInstruction, OpCode},
-    vm::{NyarVM, ExecutionContext},
+    instruction::{NyarInstruction, },
+    vm::{VirtualMachine, ExecutionContext},
     object::{Class, Trait, Enum, NyarObject},
     control_flow::{ControlFlow, NyarHandler},
 };

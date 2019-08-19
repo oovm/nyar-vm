@@ -5,29 +5,21 @@
 use crate::value::NyarValue;
 use gc_arena::Collect;
 
-/// 操作码枚举
-#[derive(Debug, Clone, PartialEq, Eq, Collect)]
+/// 指令枚举
+#[derive(Debug, Clone, Collect)]
 #[collect(no_drop)]
-pub enum OpCode {
+pub enum NyarInstruction {
     // 栈操作
-    Push, // 将值压入栈
-    Pop,  // 弹出栈顶值
-    Dup,  // 复制栈顶值
-    Swap, // 交换栈顶两个值
+    Push { constant_index: usize }, // 将常量池中的值压入栈
+    Pop,                          // 弹出栈顶值
+    Dup,                          // 复制栈顶值
+    Swap,                         // 交换栈顶两个值
 
     // 变量操作
-    LoadLocal,   // 加载局部变量
-    StoreLocal,  // 存储局部变量
-    LoadGlobal,  // 加载全局变量
-    StoreGlobal, // 存储全局变量
-
-    // 算术运算
-    Add, // 加法
-    Sub, // 减法
-    Mul, // 乘法
-    Div, // 除法
-    Mod, // 取模
-    Neg, // 取负
+    LoadLocal { local_index: usize },    // 加载局部变量
+    StoreLocal { local_index: usize },   // 存储局部变量
+    LoadGlobal { name_index: usize },   // 加载全局变量
+    StoreGlobal { name_index: usize },  // 存储全局变量
 
     // 逻辑运算
     And, // 逻辑与
@@ -43,24 +35,24 @@ pub enum OpCode {
     GreaterEqual, // 大于等于
 
     // 控制流
-    Jump,      // 无条件跳转
-    JumpIf,    // 条件跳转
-    JumpIfNot, // 条件不成立跳转
-    Call,      // 调用函数
-    Return,    // 函数返回
-    Yield,     // 生成器产出值
+    Jump { target: usize },      // 无条件跳转
+    JumpIf { target: usize },    // 条件跳转
+    JumpIfNot { target: usize }, // 条件不成立跳转
+    Call { arg_count: usize }, // 调用函数
+    Return,                    // 函数返回
+    Yield,                     // 生成器产出值
 
     // 对象操作
-    NewObject,   // 创建新对象
-    GetProperty, // 获取属性
-    SetProperty, // 设置属性
-    GetMethod,   // 获取方法
-    CallMethod,  // 调用方法
+    NewObject { class_name_index: usize },   // 创建新对象
+    GetProperty { property_name_index: usize }, // 获取属性
+    SetProperty { property_name_index: usize }, // 设置属性
+    GetMethod { method_name_index: usize },   // 获取方法
+    CallMethod { method_name_index: usize, arg_count: usize },  // 调用方法
 
     // 数组操作
-    NewArray, // 创建新数组
-    GetIndex, // 获取数组元素
-    SetIndex, // 设置数组元素
+    NewArray { size: usize }, // 创建新数组
+    GetIndex,               // 获取数组元素
+    SetIndex,               // 设置数组元素
 
     // 异步操作
     Await,   // 等待异步操作完成
@@ -78,28 +70,6 @@ pub enum OpCode {
 
     // 其他
     Nop, // 空操作
-}
-
-/// 指令结构
-#[derive(Debug, Clone, Collect)]
-#[collect(no_drop)]
-pub struct NyarInstruction {
-    /// 操作码
-    pub opcode: OpCode,
-    /// 操作数
-    pub operands: Vec<usize>,
-}
-
-impl NyarInstruction {
-    /// 创建一个新指令
-    pub fn new(opcode: OpCode, operands: Vec<usize>) -> Self {
-        Self { opcode, operands }
-    }
-
-    /// 创建一个无操作数的指令
-    pub fn simple(opcode: OpCode) -> Self {
-        Self { opcode, operands: Vec::new() }
-    }
 }
 
 /// 代码块结构

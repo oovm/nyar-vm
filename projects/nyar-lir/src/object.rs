@@ -3,7 +3,7 @@
 //! 实现了Nyar语言的对象系统，包括Class、Trait和Enum。
 
 use crate::value::{NyarValue, Function};
-use gc_arena::{Arena, Collect, Gc, Mutation};
+use gc_arena::{ Collect, Gc, Mutation};
 use std::collections::HashMap;
 
 /// 类定义
@@ -244,7 +244,7 @@ impl<'gc> NyarObject<'gc> {
     pub fn call_method(
         &self,
         name: &str,
-        args: Vec<NyarValue<'gc>>,
+        _args: Vec<NyarValue<'gc>>,
     ) -> Option<Gc<'gc, Function<'gc>>> {
         if let Some(class) = &self.class {
             class.find_method(name)

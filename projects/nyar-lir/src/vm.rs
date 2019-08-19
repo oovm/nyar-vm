@@ -4,16 +4,16 @@
 
 use crate::{
     Result,
-    instruction::{NyarInstruction, OpCode},
+    instruction::NyarInstruction,
     value::{Function, NyarValue},
 };
-use gc_arena::{Arena, Collect, Gc, Mutation, Rootable};
+use gc_arena::{ Collect, Gc, Mutation, };
 use std::{collections::HashMap, thread::JoinHandle};
 
 /// 虚拟机
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct NyarVM<'vm> {
+pub struct VirtualMachine<'vm> {
     /// 执行上下文
     pub context: ExecutionContext<'vm>,
     /// 代码段
@@ -86,9 +86,9 @@ impl<'gc> ExecutionContext<'gc> {
     }
 }
 
-impl<'vm> NyarVM<'vm> {
+impl<'vm> VirtualMachine<'vm> {
     /// 创建一个新的虚拟机
-    pub fn new(mc: Mutation<'vm>) -> Self {
+    pub fn new(_mc: Mutation<'vm>) -> Self {
         Self {
             context: ExecutionContext::new(),
             code: Vec::new(),
@@ -99,26 +99,25 @@ impl<'vm> NyarVM<'vm> {
     }
 
     /// 执行指令
-    pub fn execute(&mut self, mc: Mutation<'vm>) -> Result<NyarValue<'vm>> {
+    pub fn execute(&mut self, mc: &Mutation<'vm>) -> Result<NyarValue<'vm>> {
         while self.context.ip < self.code.len() {
             let instruction = &self.code[self.context.ip];
             self.context.ip += 1;
 
-            match instruction.opcode {
+            match instruction {
                 // 栈操作
-                OpCode::Push => {
-                    let constant_idx = instruction.operands[0];
-                    let value = self.constants[constant_idx].clone();
+                NyarInstruction::Push { constant_index } => {
+                    let value = self.constants[*constant_index].clone();
                     self.context.push(value);
                 }
-                OpCode::Pop => {
+                NyarInstruction::Pop => {
                     self.context.pop()?;
                 }
-                OpCode::Dup => {
+                NyarInstruction::Dup => {
                     let value = self.context.peek()?.clone();
                     self.context.push(value);
                 }
-                OpCode::Swap => {
+                NyarInstruction::Swap => {
                     let b = self.context.pop()?;
                     let a = self.context.pop()?;
                     self.context.push(b);
@@ -126,31 +125,27 @@ impl<'vm> NyarVM<'vm> {
                 }
 
                 // 变量操作
-                OpCode::LoadLocal => {
-                    let local_idx = instruction.operands[0];
-                    let value = self.context.locals[local_idx].clone();
+                NyarInstruction::LoadLocal { local_index } => {
+                    let value = self.context.locals[*local_index].clone();
                     self.context.push(value);
                 }
-                OpCode::StoreLocal => {
-                    let local_idx = instruction.operands[0];
+                NyarInstruction::StoreLocal { local_index } => {
                     let value = self.context.pop()?;
-                    if local_idx >= self.context.locals.len() {
-                        self.context.locals.resize(local_idx + 1, NyarValue::Null);
+                    if *local_index >= self.context.locals.len() {
+                        self.context.locals.resize(*local_index + 1, NyarValue::Null);
                     }
-                    self.context.locals[local_idx] = value;
+                    self.context.locals[*local_index] = value;
                 }
-                OpCode::LoadGlobal => {
-                    let name_idx = instruction.operands[0];
-                    let name = match &self.constants[name_idx] {
+                NyarInstruction::LoadGlobal { name_index } => {
+                    let name = match &self.constants[*name_index] {
                         NyarValue::String(s) => s.to_string(),
                         _ => return Err(nyar_error::NyarError::custom("Expected string for global name")),
                     };
                     let value = self.context.globals.get(&name).cloned().unwrap_or(NyarValue::Null);
                     self.context.push(value);
                 }
-                OpCode::StoreGlobal => {
-                    let name_idx = instruction.operands[0];
-                    let name = match &self.constants[name_idx] {
+                NyarInstruction::StoreGlobal { name_index } => {
+                    let name = match &self.constants[*name_index] {
                         NyarValue::String(s) => s.to_string(),
                         _ => return Err(nyar_error::NyarError::custom("Expected string for global name")),
                     };
@@ -159,32 +154,28 @@ impl<'vm> NyarVM<'vm> {
                 }
 
                 // 控制流
-                OpCode::Jump => {
-                    let target = instruction.operands[0];
-                    self.context.ip = target;
+                NyarInstruction::Jump { target } => {
+                    self.context.ip = *target;
                 }
-                OpCode::JumpIf => {
-                    let target = instruction.operands[0];
+                NyarInstruction::JumpIf { target } => {
                     let condition = self.context.pop()?;
                     if let NyarValue::Boolean(true) = condition {
-                        self.context.ip = target;
+                        self.context.ip = *target;
                     }
                 }
-                OpCode::JumpIfNot => {
-                    let target = instruction.operands[0];
+                NyarInstruction::JumpIfNot { target } => {
                     let condition = self.context.pop()?;
                     if let NyarValue::Boolean(false) = condition {
-                        self.context.ip = target;
+                        self.context.ip = *target;
                     }
                 }
-                OpCode::Call => {
-                    let arg_count = instruction.operands[0];
+                NyarInstruction::Call { arg_count } => {
                     let function_value = self.context.pop()?;
 
                     if let NyarValue::Function(function) = function_value {
                         // 保存当前执行状态
                         let return_address = self.context.ip;
-                        let base_pointer = self.context.locals.len() - arg_count;
+                        let base_pointer = self.context.locals.len() - *arg_count;
 
                         self.context.call_stack.push(NyarFrame { return_address, base_pointer });
 
@@ -208,7 +199,7 @@ impl<'vm> NyarVM<'vm> {
                         return Err(nyar_error::NyarError::custom("Called value is not a function"));
                     }
                 }
-                OpCode::Return => {
+                NyarInstruction::Return => {
                     let return_value = self.context.pop()?;
 
                     if let Some(frame) = self.context.call_stack.pop() {
@@ -222,18 +213,16 @@ impl<'vm> NyarVM<'vm> {
                 }
 
                 // 对象操作
-                OpCode::NewObject => {
-                    let class_name_idx = instruction.operands[0];
-                    let class_name = match &self.constants[class_name_idx] {
+                NyarInstruction::NewObject { class_name_index } => {
+                    let class_name = match &self.constants[*class_name_index] {
                         NyarValue::String(s) => s.to_string(),
                         _ => return Err(nyar_error::NyarError::custom("Expected string for class name")),
                     };
                     let object = NyarValue::new_object(mc, &class_name);
                     self.context.push(object);
                 }
-                OpCode::GetProperty => {
-                    let prop_name_idx = instruction.operands[0];
-                    let prop_name = match &self.constants[prop_name_idx] {
+                NyarInstruction::GetProperty { property_name_index } => {
+                    let prop_name = match &self.constants[*property_name_index] {
                         NyarValue::String(s) => s.to_string(),
                         _ => return Err(nyar_error::NyarError::custom("Expected string for property name")),
                     };
@@ -248,9 +237,8 @@ impl<'vm> NyarVM<'vm> {
                         return Err(nyar_error::NyarError::custom("Cannot get property of non-object"));
                     }
                 }
-                OpCode::SetProperty => {
-                    let prop_name_idx = instruction.operands[0];
-                    let prop_name = match &self.constants[prop_name_idx] {
+                NyarInstruction::SetProperty { property_name_index } => {
+                    let prop_name = match &self.constants[*property_name_index] {
                         NyarValue::String(s) => s.to_string(),
                         _ => return Err(nyar_error::NyarError::custom("Expected string for property name")),
                     };
@@ -269,14 +257,14 @@ impl<'vm> NyarVM<'vm> {
                 }
 
                 // 异步操作
-                OpCode::Await => {
+                NyarInstruction::Await => {
                     // 实际实现需要与tokio集成
                     // 这里只是一个简化的示例
                     let future_value = self.context.pop()?;
                     // 在实际实现中，这里应该暂停当前执行并等待future完成
                     self.context.push(NyarValue::Null); // 占位符
                 }
-                OpCode::BlockOn => {
+                NyarInstruction::BlockOn => {
                     // 阻塞等待异步操作完成
                     // 实际实现需要与tokio集成
                     let future_value = self.context.pop()?;
@@ -285,8 +273,9 @@ impl<'vm> NyarVM<'vm> {
                 }
 
                 // 其他指令...
+                // TODO: 实现其他指令
                 _ => {
-                    return Err(nyar_error::NyarError::custom(format!("Unimplemented opcode: {:?}", instruction.opcode)));
+                    return Err(nyar_error::NyarError::custom(format!("Unimplemented instruction: {:?}", instruction)));
                 }
             }
         }

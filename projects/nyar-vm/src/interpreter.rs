@@ -2,9 +2,9 @@
 //!
 //! 负责执行Nyar语言的低级中间表示(LIR)指令。
 
-use gc_arena::{Arena, Collect, Gc, GcCell, MutationContext};
+use gc_arena::{Arena, Collect, Gc, GcCell, Mutation, MutationContext};
 use nyar_error::NyarError;
-use nyar_lir::{NyarInstruction, OpCode, Value, VirtualMachine, ExecutionContext};
+use nyar_lir::{NyarInstruction, OpCode, Value, VirtualMachine, ExecutionContext, NyarValue};
 use std::collections::HashMap;
 
 /// 解释器结构
@@ -20,7 +20,7 @@ pub struct InterpreterRoots<'gc> {
     /// 虚拟机
     pub vm: VirtualMachine<'gc>,
     /// 全局变量
-    pub globals: HashMap<String, Value<'gc>>,
+    pub globals: HashMap<String, NyarValue<'gc>>,
 }
 
 impl Interpreter {
@@ -48,7 +48,7 @@ impl Interpreter {
                     // 由于生命周期问题，这里需要将值转换为'static
                     // 实际实现中，需要深度复制值或使用其他方法处理
                     // 这里简化为返回Null
-                    Ok(Value::Null)
+                    Ok(NyarValue::Null)
                 },
                 Err(e) => Err(e),
             }
@@ -56,17 +56,17 @@ impl Interpreter {
     }
 
     /// 设置全局变量
-    pub fn set_global(&mut self, name: &str, value: Value<'static>) {
+    pub fn set_global(&mut self, name: &str, value: NyarValue<'static>) {
         self.arena.mutate(|mc, roots| {
             // 由于生命周期问题，这里需要将'static值转换为'gc
             // 实际实现中，需要深度复制值
             // 这里简化处理
-            roots.globals.insert(name.to_string(), Value::Null);
+            roots.globals.insert(name.to_string(), NyarValue::Null);
         });
     }
 
     /// 获取全局变量
-    pub fn get_global(&self, name: &str) -> Option<Value<'static>> {
+    pub fn get_global(&self, name: &str) -> Option<NyarValue<'static>> {
         // 由于生命周期问题，这里需要将'gc值转换为'static
         // 实际实现中，需要深度复制值
         // 这里简化为返回None
@@ -78,7 +78,7 @@ impl Interpreter {
         &self,
         instruction: &NyarInstruction,
         context: &mut ExecutionContext<'_>,
-        mc: MutationContext<'_, '_>,
+        mc: Mutation<'_, '_>,
     ) -> crate::Result<()> {
         match instruction.opcode {
             // 栈操作
