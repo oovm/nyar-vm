@@ -1,5 +1,8 @@
-use crate::{Gc, Value};
-use std::{cell::RefCell, collections::HashSet, marker::PhantomData};
+use crate::{Gc, Value, VmError};
+use std::{
+    collections::{HashSet},
+    marker::PhantomData,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct Heap {
@@ -8,7 +11,7 @@ pub struct Heap {
 }
 #[derive(Debug, Clone)]
 pub struct GcCell {
-    value: RefCell<Value>,
+    pub value: Value,
     state: GcState,
     forwarding_address: Option<usize>,
 }
@@ -25,55 +28,54 @@ impl Heap {
         if root {
             self.roots.insert(index);
         }
-        Gc { index, phantom: PhantomData::default() }
+        Gc { pointer: index, phantom: PhantomData::default() }
     }
 
     pub fn dealloc<T: 'static>(&mut self, gc_ref: Gc<T>) {
-        self.roots.remove(&gc_ref.index);
+        self.roots.remove(&gc_ref.pointer);
+    }
+
+    pub fn get_value(&self, index: usize) -> Option<&Value> {
+        let cell = self.memory.get(index)?;
+        Some(&cell.value)
     }
 
     pub fn collect(&mut self) {
-        // 1. Reset state for all existing objects
+        // 1. 重置所有 GC 追踪状态
         for marker in self.memory.iter_mut() {
             marker.state = GcState::Unmarked;
             marker.forwarding_address = None;
         }
 
-        // 2. Mark phase: Find all reachable objects
+        // 2. 标记所有可达对象
         let mut worklist = Vec::new();
-
+        // 2.1 标记根对象
         for &root_index in &self.roots {
-            if root_index < self.memory.len() {
-                if self.memory[root_index].state == GcState::Unmarked {
-                    self.memory[root_index].state = GcState::Marked;
+            match self.memory.get_mut(root_index) {
+                Some(cell) => {
+                    cell.state = GcState::Marked;
                     worklist.push(root_index);
                 }
+                None => eprintln!("Root object out of bounds: {}", root_index),
             }
         }
-
-        let mut worklist_idx = 0;
-        while worklist_idx < worklist.len() {
-            let current_obj_index = worklist[worklist_idx];
-            worklist_idx += 1;
-
-            // Collect children indices first to avoid nested mutable/immutable borrows of self.memory
-            let mut children_target_indices = Vec::new();
-            if let Value::List(ref children_gcs) = self.memory[current_obj_index].value {
-                for child_gc in children_gcs {
-                    children_target_indices.push(child_gc.index);
-                }
-            }
+        // 2.2 递归标记其他可达对象
+        let mut live_index = 0;
+        while live_index < worklist.len() {
+            let current_obj_index = worklist[live_index];
+            live_index += 1;
+            
+            // 手机当前对象的所有子对象索引
+            let children_target_indices = self.get_value(current_obj_index).map(|x| x.gc_trace()).unwrap_or_default();
 
             // Now mark the children
             for child_obj_index in children_target_indices {
-                if child_obj_index < self.memory.len() && self.memory[child_obj_index].state == GcState::Unmarked {
-                    self.memory[child_obj_index].state = GcState::Marked;
-                    worklist.push(child_obj_index);
-                }
+                self.memory[child_obj_index].state = GcState::Marked;
+                worklist.push(child_obj_index);
             }
         }
-
-        // 3. Compute forwarding addresses for marked (live) objects
+        
+        // 3. 更新所有标记对象的转发地址
         let mut new_address: usize = 0;
         for old_index in 0..self.memory.len() {
             if self.memory[old_index].state == GcState::Marked {
@@ -93,7 +95,7 @@ impl Heap {
                     // Immutable borrow
                     let mut new_indices_for_current_list = Vec::with_capacity(children_gcs.len());
                     for child_gc in children_gcs {
-                        let pointed_obj_old_idx = child_gc.index;
+                        let pointed_obj_old_idx = child_gc.pointer;
                         if pointed_obj_old_idx < self.memory.len() && self.memory[pointed_obj_old_idx].state == GcState::Marked
                         {
                             // If the pointed-to object is live and marked, it must have a forwarding address.
@@ -113,7 +115,7 @@ impl Heap {
                         else {
                             // Child points to an unmarked/collected object or out of bounds.
                             // Keep the old index; it will be a "dangling" pointer.
-                            new_indices_for_current_list.push(child_gc.index);
+                            new_indices_for_current_list.push(child_gc.pointer);
                         }
                     }
                     list_pointer_updates.push((old_idx, new_indices_for_current_list));
@@ -129,7 +131,7 @@ impl Heap {
                     // Mutable borrow
                     for (i, new_idx) in new_child_indices.iter().enumerate() {
                         if i < children_gcs_mut.len() {
-                            children_gcs_mut[i].index = *new_idx;
+                            children_gcs_mut[i].pointer = *new_idx;
                         }
                     }
                 }
@@ -151,7 +153,7 @@ impl Heap {
 
         // 5. Compact phase: Move marked objects to new memory locations
         if live_object_count > 0 {
-            let mut new_memory: Vec<Gc<Value>> = Vec::with_capacity(live_object_count);
+            // let mut new_memory: Vec<Gc<Value>> = Vec::with_capacity(live_object_count);
             // Create a temporary vector initialized to hold the new objects.
             // Using a vec of Option to build the new_memory, then unwrapping.
             // This is safer if GcMarker wasn't easily default-constructible for placeholder.
@@ -196,6 +198,19 @@ impl Heap {
 
 impl GcCell {
     fn new(value: Value) -> Self {
-        GcCell { value: RefCell::new(value), state: GcState::Unmarked, forwarding_address: None }
+        GcCell { value, state: GcState::Unmarked, forwarding_address: None }
+    }
+}
+impl<T> Gc<T> {
+    pub fn deref<'vm, V>(&self, heap: &'vm Heap) -> Result<V, VmError>
+    where
+        V: TryFrom<&'vm Value, Error = VmError>,
+    {
+        if self.pointer >= heap.memory.len() {
+            return Err(VmError::IndexOutOfBounds);
+        }
+        let marker = &heap.memory[self.pointer];
+        // After GC, objects in 'memory' are live. Their GcState is reset to Unmarked.
+        V::try_from(&marker.value)
     }
 }
