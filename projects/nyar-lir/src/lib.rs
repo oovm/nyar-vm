@@ -2,19 +2,12 @@
 //!
 //! 这个模块实现了Nyar语言的低级中间表示，使用栈机模型执行指令。
 
-mod value;
+mod heap;
 mod instruction;
-mod vm;
-mod object;
-mod control_flow;
+mod values;
 
 pub use crate::{
-    value::{NyarValue, ValueType},
-    instruction::{NyarInstruction, },
-    vm::{VirtualMachine, ExecutionContext},
-    object::{Class, Trait, Enum, NyarObject},
-    control_flow::{ControlFlow, NyarHandler},
+    heap::{Gc, Heap},
+    instruction::Instruction,
+    values::NyarValue,
 };
-
-/// Nyar-LIR 的结果类型
-pub type Result<T> = std::result::Result<T, nyar_error::NyarError>;
