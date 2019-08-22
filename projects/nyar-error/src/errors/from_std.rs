@@ -3,7 +3,7 @@ use std::str::ParseBoolError;
 
 impl From<NyarErrorKind> for NyarError {
     fn from(value: NyarErrorKind) -> Self {
-        NyarError { kind: Box::new(value) }
+        NyarError { kind: Box::new(value), span: Default::default(), file: Default::default() }
     }
 }
 

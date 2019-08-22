@@ -3,7 +3,6 @@
 use crate::heap::Gc;
 use indexmap::IndexMap;
 use num::BigInt;
-use nyar_error::NyarError;
 use std::{collections::HashMap, fmt::Debug};
 
 /// VM支持的所有值类型

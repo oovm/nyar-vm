@@ -1,3 +1,6 @@
+use arcstr::ArcStr;
+use std::ops::Range;
+
 mod display;
 mod from_num;
 mod from_std;
@@ -6,6 +9,8 @@ pub type Result<T> = std::result::Result<T, NyarError>;
 #[derive(Clone, PartialEq)]
 pub struct NyarError {
     kind: Box<NyarErrorKind>,
+    span: Range<usize>,
+    file: ArcStr,
 }
 
 #[derive(Clone, Debug, PartialEq)]

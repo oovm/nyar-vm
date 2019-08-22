@@ -16,6 +16,9 @@ indexmap = "2.7.0"
 version = "0.1.*"
 path = "../nyar-error"
 
+[dependencies.nyar-lir]
+version = "*"
+path = "../nyar-lir"
 
 [dev-dependencies]
 
