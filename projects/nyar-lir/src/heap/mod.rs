@@ -29,6 +29,7 @@ pub struct GcValue {
     /// 对象值
     value: NyarValue,
 }
+
 /// GC指针，指向堆中的值
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Gc<T: ?Sized> {

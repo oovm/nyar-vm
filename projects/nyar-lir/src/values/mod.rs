@@ -1,9 +1,15 @@
 //! 值类型模块，定义了VM支持的所有值类型
 
 use crate::heap::Gc;
+pub use self::objects::NyarObject;
+pub use self::vectors::NyarVector;
 use indexmap::IndexMap;
 use num::BigInt;
 use std::{collections::HashMap, fmt::Debug};
+use std::collections::VecDeque;
+
+mod objects;
+mod vectors;
 
 /// VM支持的所有值类型
 #[derive(Debug, Clone)]
@@ -17,9 +23,9 @@ pub enum NyarValue {
     /// 字符串，存储在GC堆上
     String(Box<String>),
     /// 数组，存储在GC堆上
-    List(Vec<Gc<NyarValue>>),
+    Vector(Box<NyarVector>),
     /// 对象，存储在GC堆上
-    Object(IndexMap<String, Gc<NyarValue>>),
+    Object(Box<NyarObject>),
     /// 函数，包含函数体和闭包环境
     Function(Box<NyarFunction>),
     /// 类定义
@@ -42,7 +48,7 @@ impl NyarValue {
             NyarValue::Boolean(_) => "boolean",
             NyarValue::Integer(_) => "bigint",
             NyarValue::String(_) => "string",
-            NyarValue::List(_) => "array",
+            NyarValue::Vector(_) => "array",
             NyarValue::Object(_) => "object",
             NyarValue::Function(_) => "function",
             NyarValue::Class(_) => "class",

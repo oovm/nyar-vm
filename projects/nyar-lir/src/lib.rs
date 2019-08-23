@@ -4,10 +4,10 @@
 
 mod heap;
 mod instruction;
-mod values;
+pub mod values;
 
 pub use crate::{
     heap::{Gc, Heap},
     instruction::Instruction,
-    values::NyarValue,
+    values::{CoroutineState, NyarCoroutine, NyarFunction, NyarHandler, NyarValue},
 };
