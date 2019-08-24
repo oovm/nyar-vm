@@ -29,6 +29,9 @@ impl Display for NyarErrorKind {
             NyarErrorKind::Custom { message } => {
                 write!(f, "Custom error: {}", message)
             }
+            NyarErrorKind::UseAfterFree { address } => {
+                write!(f, "Use after free error: {}", address)
+            }
         }
     }
 }
